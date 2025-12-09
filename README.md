@@ -54,4 +54,5 @@ Available on [GitHub](https://github.com/SqueakySquared/SqueakysItemMultiplier)
 ## Credits
 
 Developed by Squeaky
+
 Icon by Bahmbu
