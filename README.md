@@ -27,7 +27,7 @@ The configuration file is automatically created at `BepInEx/config/com.squeakysq
 
 | Setting | Default | Range/Options | Description |
 |---------|---------|---------------|-------------|
-| **ItemMultiplier** | `5` | 1-100 | Controls how many copies of each item you receive |
+| **ItemMultiplier** | `5` | 1-2B | Controls how many copies of each item you receive |
 | **MultiplyLunarItems** | `true` | true/false | Enable or disable multiplication for lunar (blue) items |
 | **MultiplyVoidItems** | `true` | true/false | Enable or disable multiplication for void (purple) items |
 | **EnableDebugLogging** | `true` | true/false | Provides detailed logging for troubleshooting purposes |
@@ -44,13 +44,6 @@ The configuration file is automatically created at `BepInEx/config/com.squeakysq
 
 - Scrap item redemptions are intentionally excluded from multiplication to preserve intended game mechanics - looking into making this an option as well
 - World-unique items (such as artifact keys) are not multiplied to maintain progression balance
-
-
-## Changelog
-
-### v1.0.0
-- Works with Risk of Rain 2: Alloyed Collective
-- Configurable filtering for lunar and void items
 
 
 ## Source Code
