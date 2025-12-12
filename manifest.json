@@ -1,6 +1,6 @@
 {
   "name": "Squeakys_Item_Multiplier",
-  "version_number": "1.0.0",
+  "version_number": "1.0.1",
   "website_url": "https://github.com/SqueakySquared/SqueakysItemMultiplier",
   "description": "Multiplies items picked up by a configurable amount.",
   "dependencies": [

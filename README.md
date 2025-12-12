@@ -4,7 +4,7 @@ It multiplies the items you pick up. It's on the box
 
 ## Features
 
-- **Flexible**: 1x to 100x (could probably do more but haven't tested - also don't get shaped glass if going over 99... or do, idc lol)
+- **Flexible**: 1x to 2,000,000,000x (I've only tested with a few thousand and works)
 - **Filtering System**:
   - Configurable lunar item multiplication
   - Configurable void item multiplication
@@ -27,7 +27,7 @@ The configuration file is automatically created at `BepInEx/config/com.squeakysq
 
 | Setting | Default | Range/Options | Description |
 |---------|---------|---------------|-------------|
-| **ItemMultiplier** | `5` | 1-100 | Controls how many copies of each item you receive |
+| **ItemMultiplier** | `5` | 1-2B | Controls how many copies of each item you receive |
 | **MultiplyLunarItems** | `true` | true/false | Enable or disable multiplication for lunar (blue) items |
 | **MultiplyVoidItems** | `true` | true/false | Enable or disable multiplication for void (purple) items |
 | **EnableDebugLogging** | `true` | true/false | Provides detailed logging for troubleshooting purposes |
@@ -46,13 +46,6 @@ The configuration file is automatically created at `BepInEx/config/com.squeakysq
 - World-unique items (such as artifact keys) are not multiplied to maintain progression balance
 
 
-## Changelog
-
-### v1.0.0
-- Works with Risk of Rain 2: Alloyed Collective
-- Configurable filtering for lunar and void items
-
-
 ## Source Code
 
 Available on [GitHub](https://github.com/SqueakySquared/SqueakysItemMultiplier)
@@ -61,3 +54,5 @@ Available on [GitHub](https://github.com/SqueakySquared/SqueakysItemMultiplier)
 ## Credits
 
 Developed by Squeaky
+
+Icon by Bahmbu

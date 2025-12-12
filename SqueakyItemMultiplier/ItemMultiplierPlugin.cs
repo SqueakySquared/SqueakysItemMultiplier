@@ -20,7 +20,7 @@ namespace SqueakyItemMultiplier
             // Config setup
             itemMultiplier = Config.Bind("Settings", "ItemMultiplier", 5,
                 new ConfigDescription("Multiplier for items (e.g., 5 means 1 item becomes 5)",
-                    new AcceptableValueRange<int>(1, 100)));
+                    new AcceptableValueRange<int>(1, int.MaxValue)));
 
             enableDebugLogging = Config.Bind("Debug", "EnableDebugLogging", true,
                 "Enable detailed logging");
