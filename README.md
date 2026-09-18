@@ -23,6 +23,8 @@ It multiplies the items you pick up. It's on the box
 
 The configuration file is automatically created at `BepInEx/config/com.squeakysquared.squeakyitemmultiplier.cfg` after the first launch
 
+If [RiskOfOptions](https://thunderstore.io/c/riskofrain2/p/Rune580/Risk_Of_Options/) is installed, these settings are also available in its in-game Mod Options menu. RiskOfOptions is optional; without it, the configuration file continues to work normally.
+
 ### Available Settings
 
 | Setting | Default | Range/Options | Description |

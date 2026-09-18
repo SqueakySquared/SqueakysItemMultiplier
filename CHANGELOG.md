@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Added optional RiskOfOptions support for editing all settings in game
+
 ## v1.0.0
 - Works with Risk of Rain 2: Alloyed Collective
 - Configurable filtering for lunar and void items

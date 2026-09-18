@@ -1,13 +1,19 @@
 using BepInEx;
+using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using RoR2;
+using System;
+using System.Runtime.CompilerServices;
 using UnityEngine.Networking;
 
 namespace SqueakyItemMultiplier
 {
     [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
+    [BepInDependency(RiskOfOptionsGuid, BepInDependency.DependencyFlags.SoftDependency)]
     public class SqueakyItemMultiplierPlugin : BaseUnityPlugin
     {
+        private const string RiskOfOptionsGuid = "com.rune580.riskofoptions";
+
         private ConfigEntry<int> itemMultiplier;
         private ConfigEntry<bool> enableDebugLogging;
         private ConfigEntry<bool> multiplyLunarItems;
@@ -31,6 +37,8 @@ namespace SqueakyItemMultiplier
             multiplyVoidItems = Config.Bind("Settings", "MultiplyVoidItems", true,
                 "Multiply void (purple) items");
 
+            RegisterRiskOfOptionsIfAvailable();
+
             Logger.LogWarning($"=== CONFIG LOADED: Multiplier={itemMultiplier.Value}, Debug={enableDebugLogging.Value} ===");
             Logger.LogInfo($"{PluginInfo.PLUGIN_NAME} v{PluginInfo.PLUGIN_VERSION} loaded! Multiplier: {itemMultiplier.Value}x");
 
@@ -38,6 +46,60 @@ namespace SqueakyItemMultiplier
             On.RoR2.GenericPickupController.AttemptGrant += OnPickupAttemptGrant;
 
             Logger.LogWarning("=== HOOK REGISTERED ===");
+        }
+
+        private void RegisterRiskOfOptionsIfAvailable()
+        {
+            if (!Chainloader.PluginInfos.ContainsKey(RiskOfOptionsGuid))
+                return;
+
+            try
+            {
+                RegisterRiskOfOptions();
+                Logger.LogInfo("Registered settings with RiskOfOptions.");
+            }
+            catch (Exception exception)
+            {
+                Logger.LogWarning($"RiskOfOptions is installed, but its settings could not be registered: {exception}");
+            }
+        }
+
+        // Keep the optional integration isolated from the core plugin load path.
+        [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
+        private void RegisterRiskOfOptions()
+        {
+            var riskOfOptionsAssembly = Chainloader.PluginInfos[RiskOfOptionsGuid].Instance.GetType().Assembly;
+            var managerType = riskOfOptionsAssembly.GetType("RiskOfOptions.ModSettingsManager", true);
+            var baseOptionType = riskOfOptionsAssembly.GetType("RiskOfOptions.Options.BaseOption", true);
+            var intFieldOptionType = riskOfOptionsAssembly.GetType("RiskOfOptions.Options.IntFieldOption", true);
+            var checkBoxOptionType = riskOfOptionsAssembly.GetType("RiskOfOptions.Options.CheckBoxOption", true);
+
+            var setDescription = managerType.GetMethod("SetModDescription",
+                new[] { typeof(string), typeof(string), typeof(string) });
+            var addOption = managerType.GetMethod("AddOption",
+                new[] { baseOptionType, typeof(string), typeof(string) });
+
+            if (setDescription == null || addOption == null)
+                throw new MissingMethodException("The installed RiskOfOptions version does not expose the expected API.");
+
+            setDescription.Invoke(null, new object[]
+            {
+                "Configure how many copies of picked-up items are granted and which item types are affected.",
+                PluginInfo.PLUGIN_GUID,
+                PluginInfo.PLUGIN_NAME
+            });
+
+            AddRiskOfOptionsEntry(addOption, intFieldOptionType, itemMultiplier);
+            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, multiplyLunarItems);
+            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, multiplyVoidItems);
+            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, enableDebugLogging);
+        }
+
+        private static void AddRiskOfOptionsEntry(System.Reflection.MethodInfo addOption, Type optionType,
+            ConfigEntryBase configEntry)
+        {
+            var option = Activator.CreateInstance(optionType, configEntry);
+            addOption.Invoke(null, new[] { option, PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME });
         }
 
         private void OnPickupAttemptGrant(On.RoR2.GenericPickupController.orig_AttemptGrant orig, GenericPickupController self, CharacterBody body)
