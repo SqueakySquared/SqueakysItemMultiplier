@@ -18,6 +18,10 @@ namespace SqueakyItemMultiplier
         private ConfigEntry<bool> enableDebugLogging;
         private ConfigEntry<bool> multiplyLunarItems;
         private ConfigEntry<bool> multiplyVoidItems;
+        private ConfigEntry<bool> multiplyTemporaryItems;
+
+        private Inventory activePickupInventory;
+        private bool scalingInventoryGrant;
 
         public void Awake()
         {
@@ -37,13 +41,19 @@ namespace SqueakyItemMultiplier
             multiplyVoidItems = Config.Bind("Settings", "MultiplyVoidItems", true,
                 "Multiply void (purple) items");
 
+            multiplyTemporaryItems = Config.Bind("Settings", "MultiplyTemporaryItems", false,
+                "Multiply temporary items while keeping the additional stacks temporary");
+
             RegisterRiskOfOptionsIfAvailable();
 
-            Logger.LogWarning($"=== CONFIG LOADED: Multiplier={itemMultiplier.Value}, Debug={enableDebugLogging.Value} ===");
+            Logger.LogWarning($"=== CONFIG LOADED: Multiplier={itemMultiplier.Value}, " +
+                              $"TemporaryItems={multiplyTemporaryItems.Value}, Debug={enableDebugLogging.Value} ===");
             Logger.LogInfo($"{PluginInfo.PLUGIN_NAME} v{PluginInfo.PLUGIN_VERSION} loaded! Multiplier: {itemMultiplier.Value}x");
 
             // Hook at the pickup level - where items are granted from world pickups
             On.RoR2.GenericPickupController.AttemptGrant += OnPickupAttemptGrant;
+            On.RoR2.Inventory.GiveItemPermanent_ItemIndex_int += OnGiveItemPermanent;
+            On.RoR2.Inventory.GiveItemTemp += OnGiveItemTemporary;
 
             Logger.LogWarning("=== HOOK REGISTERED ===");
         }
@@ -92,6 +102,7 @@ namespace SqueakyItemMultiplier
             AddRiskOfOptionsEntry(addOption, intFieldOptionType, itemMultiplier);
             AddRiskOfOptionsEntry(addOption, checkBoxOptionType, multiplyLunarItems);
             AddRiskOfOptionsEntry(addOption, checkBoxOptionType, multiplyVoidItems);
+            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, multiplyTemporaryItems);
             AddRiskOfOptionsEntry(addOption, checkBoxOptionType, enableDebugLogging);
         }
 
@@ -104,8 +115,6 @@ namespace SqueakyItemMultiplier
 
         private void OnPickupAttemptGrant(On.RoR2.GenericPickupController.orig_AttemptGrant orig, GenericPickupController self, CharacterBody body)
         {
-            Logger.LogWarning($"=== PICKUP ATTEMPT GRANT CALLED ===");
-
             if (body == null || self == null || body.inventory == null || itemMultiplier.Value <= 1)
             {
                 orig(self, body);
@@ -116,56 +125,101 @@ namespace SqueakyItemMultiplier
             // Clients don't need to process pickups - network sync handles everything
             if (!NetworkServer.active)
             {
-                Logger.LogInfo("Not server, skipping");
+                orig(self, body);
                 return;
             }
 
-            // Take a snapshot of current items before granting
-            var inventory = body.inventory;
-            var itemCountsBefore = new System.Collections.Generic.Dictionary<ItemIndex, int>();
-
-            foreach (ItemIndex itemIndex in ItemCatalog.allItems)
+            var previousPickupInventory = activePickupInventory;
+            activePickupInventory = body.inventory;
+            try
             {
-                int count = inventory.GetItemCountEffective(itemIndex);
-                if (count > 0)
-                {
-                    itemCountsBefore[itemIndex] = count;
-                }
+                orig(self, body);
+            }
+            finally
+            {
+                activePickupInventory = previousPickupInventory;
+            }
+        }
+
+        private void OnGiveItemPermanent(On.RoR2.Inventory.orig_GiveItemPermanent_ItemIndex_int orig,
+            Inventory self, ItemIndex itemIndex, int count)
+        {
+            if (!ShouldScaleGrant(self, itemIndex, count > 0))
+            {
+                orig(self, itemIndex, count);
+                return;
             }
 
-            // Grant the original pickup
-            orig(self, body);
+            int scaledCount = CalculateScaledGrant(count, self.GetItemCountEffective(itemIndex));
+            GrantWithoutRescaling(() => orig(self, itemIndex, scaledCount));
+            LogScaledGrant(itemIndex, count, scaledCount, false);
+        }
 
-            // Find what was added by comparing before/after
-            foreach (ItemIndex itemIndex in ItemCatalog.allItems)
+        private void OnGiveItemTemporary(On.RoR2.Inventory.orig_GiveItemTemp orig,
+            Inventory self, ItemIndex itemIndex, float countToAdd)
+        {
+            if (!multiplyTemporaryItems.Value || !ShouldScaleGrant(self, itemIndex, countToAdd > 0f) ||
+                float.IsNaN(countToAdd) || float.IsInfinity(countToAdd))
             {
-                int currentCount = inventory.GetItemCountEffective(itemIndex);
-                int previousCount = itemCountsBefore.ContainsKey(itemIndex) ? itemCountsBefore[itemIndex] : 0;
-                int addedCount = currentCount - previousCount;
-
-                if (addedCount > 0)
-                {
-                    var itemDef = ItemCatalog.GetItemDef(itemIndex);
-                    Logger.LogWarning($"=== PICKUP DETECTED: {itemDef?.name ?? "unknown"}, added {addedCount} ===");
-
-                    // Check if we should multiply this item
-                    if (ShouldMultiplyItem(itemDef))
-                    {
-                        int extraCopies = addedCount * (itemMultiplier.Value - 1);
-                        Logger.LogWarning($"=== MULTIPLYING: Giving {extraCopies} extra copies ===");
-                        inventory.GiveItemPermanent(itemDef, extraCopies);
-
-                        if (enableDebugLogging.Value)
-                        {
-                            Logger.LogInfo($"Multiplied {itemDef.nameToken} x{itemMultiplier.Value}");
-                        }
-                    }
-                    else
-                    {
-                        Logger.LogInfo($"Item {itemDef?.name} filtered out");
-                    }
-                }
+                orig(self, itemIndex, countToAdd);
+                return;
             }
+
+            float scaledCount = CalculateScaledGrant(countToAdd, self.GetItemCountEffective(itemIndex));
+            GrantWithoutRescaling(() => orig(self, itemIndex, scaledCount));
+            LogScaledGrant(itemIndex, countToAdd, scaledCount, true);
+        }
+
+        private bool ShouldScaleGrant(Inventory inventory, ItemIndex itemIndex, bool hasPositiveGrant)
+        {
+            if (!hasPositiveGrant || scalingInventoryGrant || activePickupInventory == null ||
+                inventory != activePickupInventory || itemMultiplier.Value <= 1)
+                return false;
+
+            return ShouldMultiplyItem(ItemCatalog.GetItemDef(itemIndex));
+        }
+
+        private int CalculateScaledGrant(int originalCount, int currentEffectiveCount)
+        {
+            long requestedCount = (long)originalCount * itemMultiplier.Value;
+            long availableRoom = Math.Min(int.MaxValue,
+                Math.Max(0L, (long)int.MaxValue - currentEffectiveCount));
+            long safeLimit = Math.Max(originalCount, availableRoom);
+            return (int)Math.Min(requestedCount, safeLimit);
+        }
+
+        private float CalculateScaledGrant(float originalCount, int currentEffectiveCount)
+        {
+            double requestedCount = originalCount * (double)itemMultiplier.Value;
+            double availableRoom = Math.Min(int.MaxValue,
+                Math.Max(0d, (double)int.MaxValue - currentEffectiveCount));
+            double safeLimit = Math.Max(originalCount, availableRoom);
+            return (float)Math.Min(requestedCount, safeLimit);
+        }
+
+        private void GrantWithoutRescaling(Action grant)
+        {
+            bool wasScalingInventoryGrant = scalingInventoryGrant;
+            scalingInventoryGrant = true;
+            try
+            {
+                grant();
+            }
+            finally
+            {
+                scalingInventoryGrant = wasScalingInventoryGrant;
+            }
+        }
+
+        private void LogScaledGrant(ItemIndex itemIndex, object originalCount, object scaledCount, bool isTemporary)
+        {
+            if (!enableDebugLogging.Value)
+                return;
+
+            var itemDef = ItemCatalog.GetItemDef(itemIndex);
+            string lifetime = isTemporary ? "temporary" : "permanent";
+            Logger.LogInfo($"Multiplied {lifetime} grant for {itemDef?.nameToken ?? itemIndex.ToString()}: " +
+                           $"{originalCount} -> {scaledCount}");
         }
 
         private bool ShouldMultiplyItem(ItemDef itemDef)
@@ -190,6 +244,8 @@ namespace SqueakyItemMultiplier
         public void OnDestroy()
         {
             On.RoR2.GenericPickupController.AttemptGrant -= OnPickupAttemptGrant;
+            On.RoR2.Inventory.GiveItemPermanent_ItemIndex_int -= OnGiveItemPermanent;
+            On.RoR2.Inventory.GiveItemTemp -= OnGiveItemTemporary;
             Logger.LogInfo($"{PluginInfo.PLUGIN_NAME} unloaded.");
         }
     }

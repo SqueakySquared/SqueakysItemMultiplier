@@ -12,11 +12,9 @@ It multiplies the items you pick up. It's on the box
 - **Lightweight Performance**: Optimized server-side processing ensures minimal impact on game performance - until it doesn't
 
 
-## Known Issues
-- Temp items persist - makes Junk Drones OP
-  - If you pick up a junk drone item, it will multiply correctly, however when it expires, only 1 will go away. Looking into making this a configurable option
-  - If you use a Temporary Item Dispenser, you'll get [qty] +1 and only the extra will disappear (this is working as inteded, but it does make the math a bit wonky)
-      - Artifact of command will multiply each unique item selected. The last item will have the +1 that will be temprorary. All other items will be permanent x[qty]
+## Temporary Items
+
+Temporary items are not multiplied by default. Enable `MultiplyTemporaryItems` to multiply them while keeping every additional stack temporary so it expires normally.
 
 
 ## Configuration
@@ -32,6 +30,7 @@ If [RiskOfOptions](https://thunderstore.io/c/riskofrain2/p/Rune580/Risk_Of_Optio
 | **ItemMultiplier** | `5` | 1-2B | Controls how many copies of each item you receive |
 | **MultiplyLunarItems** | `true` | true/false | Enable or disable multiplication for lunar (blue) items |
 | **MultiplyVoidItems** | `true` | true/false | Enable or disable multiplication for void (purple) items |
+| **MultiplyTemporaryItems** | `false` | true/false | Multiply temporary items without making the additional stacks permanent |
 | **EnableDebugLogging** | `true` | true/false | Provides detailed logging for troubleshooting purposes |
 
 
