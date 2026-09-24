@@ -68,7 +68,7 @@ Build with `dotnet build SqueakyItemMultiplier.slnx -c Release`. If needed, pass
 
 ## Thunderstore Downloads
 
-Thank you for [![Thunderstore download count](https://img.shields.io/thunderstore/dt/SqueakySquad/Squeakys_Item_Multiplier?label=&color=brightgreen)](https://thunderstore.io/c/riskofrain2/p/SqueakySquad/Squeakys_Item_Multiplier/) downloads!
+Thank you for [14.6K+ downloads on Thunderstore](https://thunderstore.io/c/riskofrain2/p/SqueakySquad/Squeakys_Item_Multiplier/)!
 
 Your support means a lot. Happy multiplying!
 
