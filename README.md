@@ -66,6 +66,13 @@ Available on [GitHub](https://github.com/SqueakySquared/SqueakysItemMultiplier)
 Build with `dotnet build SqueakyItemMultiplier.slnx -c Release`. If needed, pass `-p:RoR2InstallDir="path/to/Risk of Rain 2"` to locate the game's assemblies. Run the standalone progression and numeric-limit checks with `dotnet run --project tests/GrantScaling.Tests -c Release` (.NET 10 SDK).
 
 
+## Thunderstore Downloads
+
+Thank you for [![Thunderstore download count](https://img.shields.io/thunderstore/dt/SqueakySquad/Squeakys_Item_Multiplier?label=&color=brightgreen)](https://thunderstore.io/c/riskofrain2/p/SqueakySquad/Squeakys_Item_Multiplier/) downloads!
+
+Your support means a lot. Happy multiplying!
+
+
 ## Credits
 
 Developed by Squeaky
