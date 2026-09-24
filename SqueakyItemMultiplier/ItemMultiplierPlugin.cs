@@ -8,52 +8,62 @@ using UnityEngine.Networking;
 
 namespace SqueakyItemMultiplier
 {
-    [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
+    [BepInPlugin(PluginInfo.PluginGuid, PluginInfo.PluginName, PluginInfo.PluginVersion)]
     [BepInDependency(RiskOfOptionsGuid, BepInDependency.DependencyFlags.SoftDependency)]
     public class SqueakyItemMultiplierPlugin : BaseUnityPlugin
     {
         private const string RiskOfOptionsGuid = "com.rune580.riskofoptions";
 
-        private ConfigEntry<int> itemMultiplier;
-        private ConfigEntry<bool> enableDebugLogging;
-        private ConfigEntry<bool> multiplyLunarItems;
-        private ConfigEntry<bool> multiplyVoidItems;
-        private ConfigEntry<bool> multiplyTemporaryItems;
+        private ConfigEntry<int> _itemMultiplier;
+        private ConfigEntry<bool> _enableDebugLogging;
+        private ConfigEntry<bool> _multiplyLunarItems;
+        private ConfigEntry<bool> _multiplyVoidItems;
+        private ConfigEntry<bool> _multiplyTemporaryItems;
+        private ConfigEntry<bool> _exponentialItems;
 
-        private Inventory activePickupInventory;
-        private bool scalingInventoryGrant;
+        private readonly GrantScaling _grantScaling = new GrantScaling();
+
+        private Inventory _activePickupInventory;
+        private bool _scalingInventoryGrant;
 
         public void Awake()
         {
             Logger.LogWarning("=== SQUEAKY ITEM MULTIPLIER AWAKE START ===");
 
             // Config setup
-            itemMultiplier = Config.Bind("Settings", "ItemMultiplier", 5,
+            _itemMultiplier = Config.Bind("Settings", "ItemMultiplier", 5,
                 new ConfigDescription("Multiplier for items (e.g., 5 means 1 item becomes 5)",
                     new AcceptableValueRange<int>(1, int.MaxValue)));
 
-            enableDebugLogging = Config.Bind("Debug", "EnableDebugLogging", true,
+            _enableDebugLogging = Config.Bind("Debug", "EnableDebugLogging", true,
                 "Enable detailed logging");
 
-            multiplyLunarItems = Config.Bind("Settings", "MultiplyLunarItems", true,
+            _multiplyLunarItems = Config.Bind("Settings", "MultiplyLunarItems", true,
                 "Multiply lunar (blue) items");
 
-            multiplyVoidItems = Config.Bind("Settings", "MultiplyVoidItems", true,
+            _multiplyVoidItems = Config.Bind("Settings", "MultiplyVoidItems", true,
                 "Multiply void (purple) items");
 
-            multiplyTemporaryItems = Config.Bind("Settings", "MultiplyTemporaryItems", false,
+            _multiplyTemporaryItems = Config.Bind("Settings", "MultiplyTemporaryItems", false,
                 "Multiply temporary items while keeping the additional stacks temporary");
+
+            _exponentialItems = Config.Bind("Settings", "ExponentialItems", false,
+                "Grow grants per player and item type: at multiplier 5, successive pickups grant 5, 25, 125 copies. " +
+                "Only eligible pickups while this setting is enabled advance the sequence; resets each run.");
 
             RegisterRiskOfOptionsIfAvailable();
 
-            Logger.LogWarning($"=== CONFIG LOADED: Multiplier={itemMultiplier.Value}, " +
-                              $"TemporaryItems={multiplyTemporaryItems.Value}, Debug={enableDebugLogging.Value} ===");
-            Logger.LogInfo($"{PluginInfo.PLUGIN_NAME} v{PluginInfo.PLUGIN_VERSION} loaded! Multiplier: {itemMultiplier.Value}x");
+            Logger.LogWarning($"=== CONFIG LOADED: Multiplier={_itemMultiplier.Value}, " +
+                              $"TemporaryItems={_multiplyTemporaryItems.Value}, Debug={_enableDebugLogging.Value} ===");
+            Logger.LogInfo(
+                $"{PluginInfo.PluginName} v{PluginInfo.PluginVersion} loaded! Multiplier: {_itemMultiplier.Value}x");
 
             // Hook at the pickup level - where items are granted from world pickups
             On.RoR2.GenericPickupController.AttemptGrant += OnPickupAttemptGrant;
             On.RoR2.Inventory.GiveItemPermanent_ItemIndex_int += OnGiveItemPermanent;
             On.RoR2.Inventory.GiveItemTemp += OnGiveItemTemporary;
+            Run.onRunStartGlobal += ResetPickupProgression;
+            Run.onRunDestroyGlobal += ResetPickupProgression;
 
             Logger.LogWarning("=== HOOK REGISTERED ===");
         }
@@ -90,32 +100,35 @@ namespace SqueakyItemMultiplier
                 new[] { baseOptionType, typeof(string), typeof(string) });
 
             if (setDescription == null || addOption == null)
-                throw new MissingMethodException("The installed RiskOfOptions version does not expose the expected API.");
+                throw new MissingMethodException(
+                    "The installed RiskOfOptions version does not expose the expected API.");
 
             setDescription.Invoke(null, new object[]
             {
                 "Configure how many copies of picked-up items are granted and which item types are affected.",
-                PluginInfo.PLUGIN_GUID,
-                PluginInfo.PLUGIN_NAME
+                PluginInfo.PluginGuid,
+                PluginInfo.PluginName
             });
 
-            AddRiskOfOptionsEntry(addOption, intFieldOptionType, itemMultiplier);
-            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, multiplyLunarItems);
-            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, multiplyVoidItems);
-            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, multiplyTemporaryItems);
-            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, enableDebugLogging);
+            AddRiskOfOptionsEntry(addOption, intFieldOptionType, _itemMultiplier);
+            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, _multiplyLunarItems);
+            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, _multiplyVoidItems);
+            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, _multiplyTemporaryItems);
+            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, _exponentialItems);
+            AddRiskOfOptionsEntry(addOption, checkBoxOptionType, _enableDebugLogging);
         }
 
         private static void AddRiskOfOptionsEntry(System.Reflection.MethodInfo addOption, Type optionType,
             ConfigEntryBase configEntry)
         {
             var option = Activator.CreateInstance(optionType, configEntry);
-            addOption.Invoke(null, new[] { option, PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME });
+            addOption.Invoke(null, new[] { option, PluginInfo.PluginGuid, PluginInfo.PluginName });
         }
 
-        private void OnPickupAttemptGrant(On.RoR2.GenericPickupController.orig_AttemptGrant orig, GenericPickupController self, CharacterBody body)
+        private void OnPickupAttemptGrant(On.RoR2.GenericPickupController.orig_AttemptGrant orig,
+            GenericPickupController self, CharacterBody body)
         {
-            if (body == null || self == null || body.inventory == null || itemMultiplier.Value <= 1)
+            if (body == null || self == null || body.inventory == null || _itemMultiplier.Value <= 1)
             {
                 orig(self, body);
                 return;
@@ -129,15 +142,15 @@ namespace SqueakyItemMultiplier
                 return;
             }
 
-            var previousPickupInventory = activePickupInventory;
-            activePickupInventory = body.inventory;
+            var previousPickupInventory = _activePickupInventory;
+            _activePickupInventory = body.inventory;
             try
             {
                 orig(self, body);
             }
             finally
             {
-                activePickupInventory = previousPickupInventory;
+                _activePickupInventory = previousPickupInventory;
             }
         }
 
@@ -150,75 +163,73 @@ namespace SqueakyItemMultiplier
                 return;
             }
 
-            int scaledCount = CalculateScaledGrant(count, self.GetItemCountEffective(itemIndex));
+            var exponential = _exponentialItems.Value;
+            var factor = _grantScaling.GetFactor(self, (int)itemIndex, _itemMultiplier.Value, exponential);
+            var scaledCount = GrantScaling.ScalePermanent(count, self.GetItemCountEffective(itemIndex), factor);
             GrantWithoutRescaling(() => orig(self, itemIndex, scaledCount));
+            if (exponential && scaledCount > 0)
+                _grantScaling.RecordPickup(self, (int)itemIndex);
             LogScaledGrant(itemIndex, count, scaledCount, false);
         }
 
         private void OnGiveItemTemporary(On.RoR2.Inventory.orig_GiveItemTemp orig,
             Inventory self, ItemIndex itemIndex, float countToAdd)
         {
-            if (!multiplyTemporaryItems.Value || !ShouldScaleGrant(self, itemIndex, countToAdd > 0f) ||
+            if (!_multiplyTemporaryItems.Value || !ShouldScaleGrant(self, itemIndex, countToAdd > 0f) ||
                 float.IsNaN(countToAdd) || float.IsInfinity(countToAdd))
             {
                 orig(self, itemIndex, countToAdd);
                 return;
             }
 
-            float scaledCount = CalculateScaledGrant(countToAdd, self.GetItemCountEffective(itemIndex));
+            var exponential = _exponentialItems.Value;
+            var factor = _grantScaling.GetFactor(self, (int)itemIndex, _itemMultiplier.Value, exponential);
+            var scaledCount = GrantScaling.ScaleTemporary(countToAdd, self.GetItemCountEffective(itemIndex), factor);
+            if (scaledCount <= 0f)
+                return;
             GrantWithoutRescaling(() => orig(self, itemIndex, scaledCount));
+            if (exponential)
+                _grantScaling.RecordPickup(self, (int)itemIndex);
             LogScaledGrant(itemIndex, countToAdd, scaledCount, true);
         }
 
         private bool ShouldScaleGrant(Inventory inventory, ItemIndex itemIndex, bool hasPositiveGrant)
         {
-            if (!hasPositiveGrant || scalingInventoryGrant || activePickupInventory == null ||
-                inventory != activePickupInventory || itemMultiplier.Value <= 1)
+            if (!hasPositiveGrant || _scalingInventoryGrant || _activePickupInventory == null ||
+                inventory != _activePickupInventory || _itemMultiplier.Value <= 1)
                 return false;
 
             return ShouldMultiplyItem(ItemCatalog.GetItemDef(itemIndex));
         }
 
-        private int CalculateScaledGrant(int originalCount, int currentEffectiveCount)
+        private void ResetPickupProgression(Run run)
         {
-            long requestedCount = (long)originalCount * itemMultiplier.Value;
-            long availableRoom = Math.Min(int.MaxValue,
-                Math.Max(0L, (long)int.MaxValue - currentEffectiveCount));
-            long safeLimit = Math.Max(originalCount, availableRoom);
-            return (int)Math.Min(requestedCount, safeLimit);
-        }
-
-        private float CalculateScaledGrant(float originalCount, int currentEffectiveCount)
-        {
-            double requestedCount = originalCount * (double)itemMultiplier.Value;
-            double availableRoom = Math.Min(int.MaxValue,
-                Math.Max(0d, (double)int.MaxValue - currentEffectiveCount));
-            double safeLimit = Math.Max(originalCount, availableRoom);
-            return (float)Math.Min(requestedCount, safeLimit);
+            _grantScaling.Reset();
         }
 
         private void GrantWithoutRescaling(Action grant)
         {
-            bool wasScalingInventoryGrant = scalingInventoryGrant;
-            scalingInventoryGrant = true;
+            var wasScalingInventoryGrant = _scalingInventoryGrant;
+            _scalingInventoryGrant = true;
             try
             {
                 grant();
             }
             finally
             {
-                scalingInventoryGrant = wasScalingInventoryGrant;
+                _scalingInventoryGrant = wasScalingInventoryGrant;
             }
         }
 
         private void LogScaledGrant(ItemIndex itemIndex, object originalCount, object scaledCount, bool isTemporary)
         {
-            if (!enableDebugLogging.Value)
+            if (!_enableDebugLogging.Value)
                 return;
 
             var itemDef = ItemCatalog.GetItemDef(itemIndex);
-            string lifetime = isTemporary ? "temporary" : "permanent";
-            Logger.LogInfo($"Multiplied {lifetime} grant for {itemDef?.nameToken ?? itemIndex.ToString()}: " +
+            var lifetime = isTemporary ? "temporary" : "permanent";
+            var itemName = itemDef != null ? itemDef.nameToken : itemIndex.ToString();
+            Logger.LogInfo($"Multiplied {lifetime} grant for {itemName}: " +
                            $"{originalCount} -> {scaledCount}");
         }
 
@@ -228,13 +239,13 @@ namespace SqueakyItemMultiplier
                 return false;
 
             // Filter lunar items
-            if (itemDef.tier == ItemTier.Lunar && !multiplyLunarItems.Value)
+            if (itemDef.tier == ItemTier.Lunar && !_multiplyLunarItems.Value)
                 return false;
 
             // Filter void items
             if ((itemDef.tier == ItemTier.VoidTier1 || itemDef.tier == ItemTier.VoidTier2 ||
                  itemDef.tier == ItemTier.VoidTier3 || itemDef.tier == ItemTier.VoidBoss) &&
-                !multiplyVoidItems.Value)
+                !_multiplyVoidItems.Value)
                 return false;
 
             // Exclude scrap and world-unique items - not sure if working correctly
@@ -246,7 +257,10 @@ namespace SqueakyItemMultiplier
             On.RoR2.GenericPickupController.AttemptGrant -= OnPickupAttemptGrant;
             On.RoR2.Inventory.GiveItemPermanent_ItemIndex_int -= OnGiveItemPermanent;
             On.RoR2.Inventory.GiveItemTemp -= OnGiveItemTemporary;
-            Logger.LogInfo($"{PluginInfo.PLUGIN_NAME} unloaded.");
+            Run.onRunStartGlobal -= ResetPickupProgression;
+            Run.onRunDestroyGlobal -= ResetPickupProgression;
+            _grantScaling.Reset();
+            Logger.LogInfo($"{PluginInfo.PluginName} unloaded.");
         }
     }
 }
