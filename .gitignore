@@ -1,0 +1,42 @@
+# JetBrains Rider
+.idea/
+*.sln.iml
+*.DotSettings.user
+_ReSharper*/
+*.ReSharper.user
+
+# Visual Studio and VS Code
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# .NET build output
+**/bin/
+**/obj/
+artifacts/
+packages/
+*.nupkg
+*.snupkg
+
+# Test and coverage output
+TestResults/
+coverage/
+coverage.*
+*.coverage
+*.coveragexml
+*.trx
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
